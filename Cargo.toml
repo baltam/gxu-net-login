@@ -1,0 +1,11 @@
+[package]
+name = "gxu-net-login"
+version = "1.0.0"
+edition = "2018"
+
+[dependencies]
+reqwest = "0.11.0"
+tokio = { version = "1.0.1", features = ["rt", "macros"] }
+itertools = "0.10.0"
+anyhow = "1.0.37"
+configparser = "2.0.0"
