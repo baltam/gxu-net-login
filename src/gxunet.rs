@@ -1,9 +1,14 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, convert::TryFrom};
 
+use hyper::{client::HttpConnector, Body, Client, Request, Uri};
 use itertools::Itertools;
-use reqwest::{Client, Url};
+use url::Url;
 
 use crate::config::Config;
+
+static USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
+        AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.141 \
+        Safari/537.36 Edg/87.0.664.75";
 
 #[derive(Debug)]
 pub struct GxunetParams {
@@ -13,13 +18,24 @@ pub struct GxunetParams {
     user_mac: String,
 }
 
+/// 构造一个 HTTP GET 请求
+fn http_get(url: &str) -> Request<Body> {
+    Request::get(Uri::try_from(url).unwrap())
+        .header("User-Agent", USER_AGENT)
+        .body(Body::empty())
+        .unwrap()
+}
+
 /// 获取登录参数
 /// - 若返回 `Ok(Some(params))`，说明需要进行登录
 /// - 若返回 `Ok(None)`，说明已经登录
 /// - 若返回 `Err(err)`，说明发生了 HTTP 请求错误，需要重试
-pub async fn fetch_params(client: &mut Client) -> reqwest::Result<Option<GxunetParams>> {
+pub async fn fetch_params(
+    client: &mut Client<HttpConnector>,
+) -> hyper::Result<Option<GxunetParams>> {
     // 访问连接测试 URL
-    let resp = client.get("http://t.cn/?isReback=1").send().await?;
+    let req = http_get("http://t.cn/?isReback=1");
+    let resp = client.request(req).await?;
     // 检查 HTTP 状态码是否是 302 Found
     assert_eq!(resp.status(), 302);
     // 获取重定向目标地址
@@ -58,10 +74,10 @@ pub async fn fetch_params(client: &mut Client) -> reqwest::Result<Option<GxunetP
 /// - 若返回 `Ok(false)`，说明登录失败，可能是用户名密码错误，或网关协议有变化
 /// - 若返回 `Err(err)`，说明发生了 HTTP 请求错误，需要重试
 pub async fn login(
-    client: &mut Client,
+    client: &mut Client<HttpConnector>,
     params: &GxunetParams,
     config: &Config,
-) -> reqwest::Result<bool> {
+) -> hyper::Result<bool> {
     // 在学号前面添加设备类型前缀
     let device_prefix;
     if config.term_type == "1" {
@@ -89,7 +105,8 @@ pub async fn login(
         .append_pair("jsVersion", "2.4.3");
 
     // 发送请求
-    let resp = client.get(login_url).send().await?;
+    let req = http_get(login_url.as_str());
+    let resp = client.request(req).await?;
     // 检查 HTTP 状态码是否是 302 Found
     assert_eq!(resp.status(), 302);
     // 获取重定向目标地址
